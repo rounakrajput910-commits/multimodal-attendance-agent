@@ -1,36 +1,65 @@
 import subprocess
+import shutil
 import cv2
 import numpy as np
 import soundfile as sf
+
 from pathlib import Path
 
-# Project paths
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
 INPUT_VIDEO = PROJECT_DIR / "data" / "videos" / "classroom.mp4"
 OUTPUT_AUDIO = PROJECT_DIR / "data" / "videos" / "classroom_audio.wav"
 
-# FFmpeg executable path on your computer
-FFMPEG_PATH = (
-    r"C:\Users\princ\AppData\Local\Microsoft\WinGet\Packages"
-    r"\Gyan.FFmpeg.Essentials_Microsoft.Winget.Source_8wekyb3d8bbwe"
-    r"\ffmpeg-9.0.1-essentials_build\bin\ffmpeg.exe"
-)
+
+def find_ffmpeg():
+    """Find FFmpeg in PATH or a standard Windows WinGet installation."""
+
+    # First, check whether FFmpeg is available in the system PATH.
+    ffmpeg_path = shutil.which("ffmpeg")
+
+    if ffmpeg_path:
+        return ffmpeg_path
+
+    # If not found, check the usual Windows WinGet installation directory.
+    winget_packages = (
+        Path.home()
+        / "AppData"
+        / "Local"
+        / "Microsoft"
+        / "WinGet"
+        / "Packages"
+    )
+
+    if winget_packages.exists():
+        matches = list(
+            winget_packages.glob(
+                "Gyan.FFmpeg.Essentials_*/"
+                "ffmpeg-*/bin/ffmpeg.exe"
+            )
+        )
+
+        if matches:
+            return str(matches[0])
+
+    return None
 
 
 def extract_audio():
-    # Step 1: Check whether the input video exists
+    """Extract mono, 16 kHz audio from the input video."""
+
     if not INPUT_VIDEO.exists():
         print(f"Error: Video not found at {INPUT_VIDEO}")
         return
 
-    # Step 2: Check whether FFmpeg exists
-    if not Path(FFMPEG_PATH).is_file():
-        print("Error: FFmpeg executable was not found.")
-        print(f"Expected location: {FFMPEG_PATH}")
+    ffmpeg_path = find_ffmpeg()
+
+    if ffmpeg_path is None:
+        print("Error: FFmpeg could not be found.")
+        print("Install FFmpeg and make it accessible to the application.")
         return
 
-    # Step 3: Check whether OpenCV can open the video
+    # Check whether OpenCV can open the input video.
     video = cv2.VideoCapture(str(INPUT_VIDEO))
 
     if not video.isOpened():
@@ -39,9 +68,9 @@ def extract_audio():
 
     video.release()
 
-    # Step 4: Prepare the FFmpeg command
+    # Extract mono audio sampled at 16,000 Hz.
     command = [
-        FFMPEG_PATH,
+        ffmpeg_path,
         "-y",
         "-i", str(INPUT_VIDEO),
         "-vn",
@@ -51,9 +80,8 @@ def extract_audio():
         str(OUTPUT_AUDIO)
     ]
 
-    # Step 5: Extract audio
     try:
-        result = subprocess.run(
+        subprocess.run(
             command,
             capture_output=True,
             text=True,
@@ -70,7 +98,7 @@ def extract_audio():
         print(f"Details: {error}")
         return
 
-    # Step 6: Read the extracted WAV file
+    # Verify that the extracted audio can be read.
     try:
         audio, sample_rate = sf.read(
             str(OUTPUT_AUDIO),
@@ -82,18 +110,16 @@ def extract_audio():
         print(f"Details: {error}")
         return
 
-    # Step 7: Check whether audio samples exist
     if audio.size == 0:
         print("Error: The extracted audio is empty.")
         return
 
-    # Step 8: Calculate basic audio statistics
     duration = audio.shape[0] / sample_rate
     rms = float(np.sqrt(np.mean(np.square(audio))))
 
-    # Step 9: Display results
     print("\nAudio extraction completed successfully!")
     print("----------------------------------------")
+    print(f"FFmpeg location: {ffmpeg_path}")
     print(f"Audio duration: {duration:.2f} seconds")
     print(f"Sample rate: {sample_rate} Hz")
     print(f"Number of audio samples: {audio.shape[0]}")
