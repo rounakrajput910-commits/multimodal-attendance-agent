@@ -75,7 +75,7 @@ The actual Python version and dependency compatibility should be verified on the
 After cloning this project from GitHub, open a terminal in the project directory.
 
 ```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
+git clone https://github.com/rounakrajput910-commits/multimodal-attendance-agent.git
 cd multimodal-attendance-agent
 ```
 
@@ -195,4 +195,6 @@ Educational prototype. The core processing pipeline and local Streamlit dashboar
 
 ## Author
 
-Add your name and academic details here before publishing.
+**Rounak Kumar Singh**  
+B.Tech in Artificial Intelligence and Machine Learning  
+Laxminarain College of Technology and Science (LNCTS), Bhopal
