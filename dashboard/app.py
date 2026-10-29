@@ -1,0 +1,251 @@
+import json
+from pathlib import Path
+
+import pandas as pd
+import streamlit as st
+
+# Locate the main project folder.
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_DIR / "data" / "attendance"
+VIDEO_DIR = PROJECT_DIR / "data" / "videos"
+
+ANALYTICS_FILE = DATA_DIR / "session_analytics.json"
+ATTENDANCE_FILE = DATA_DIR / "attendance.csv"
+FUSED_FILE = DATA_DIR / "fused_signals.csv"
+SCORES_FILE = DATA_DIR / "engagement_scores.csv"
+SUGGESTIONS_FILE = DATA_DIR / "teaching_suggestions.csv"
+
+st.set_page_config(
+    page_title="Multimodal Attendance Agent",
+    page_icon="📊",
+    layout="wide"
+)
+
+st.title("📊 Multimodal Attendance & Engagement Agent")
+st.caption(
+    "A local prototype for analyzing visual presence, audio activity, "
+    "attendance-track estimates, and session-level patterns."
+)
+
+
+@st.cache_data
+def load_json(file_path):
+    if not file_path.exists():
+        return None
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+@st.cache_data
+def load_csv(file_path):
+    if not file_path.exists():
+        return None
+
+    try:
+        return pd.read_csv(file_path)
+    except (OSError, pd.errors.ParserError, UnicodeDecodeError):
+        return None
+
+
+analytics = load_json(ANALYTICS_FILE)
+attendance = load_csv(ATTENDANCE_FILE)
+fused = load_csv(FUSED_FILE)
+scores = load_csv(SCORES_FILE)
+suggestions = load_csv(SUGGESTIONS_FILE)
+
+# Session overview
+st.header("1. Session Overview")
+
+if analytics is None:
+    st.warning(
+        "Session analytics were not found. Run the core application first."
+    )
+else:
+    session_info = analytics.get("session_information", {})
+    attendance_info = analytics.get("attendance_statistics", {})
+    activity_info = analytics.get("activity_indicator_statistics", {})
+
+    duration = session_info.get("video_duration_seconds")
+    track_records = attendance_info.get("attendance_track_records")
+    average_activity = activity_info.get("average_activity_indicator")
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric(
+        "Video Duration",
+        f"{duration:.2f} seconds" if isinstance(duration, (int, float))
+        else "Unavailable"
+    )
+
+    col2.metric(
+        "Attendance Track Records",
+        track_records if track_records is not None else "Unavailable"
+    )
+
+    col3.metric(
+        "Average Activity Indicator",
+        f"{average_activity:.2f}/100"
+        if isinstance(average_activity, (int, float))
+        else "Unavailable"
+    )
+
+    st.info(
+        "Track records are not verified student identities. "
+        "The activity indicator is experimental and is not a validated "
+        "measure of attention, understanding, or learning."
+    )
+
+# Visual and audio signals
+st.header("2. Visual and Audio Analysis")
+
+if fused is None or fused.empty:
+    st.warning("Fused signals are unavailable. Run the core application first.")
+else:
+    if "start_time_seconds" in fused.columns:
+        fused = fused.sort_values("start_time_seconds")
+
+    if "visual_presence_ratio" in fused.columns:
+        st.subheader("Visual Presence Ratio Over Time")
+
+        visual_chart = fused[
+            ["start_time_seconds", "visual_presence_ratio"]
+        ].dropna().set_index("start_time_seconds")
+
+        st.line_chart(visual_chart)
+
+        st.caption(
+            "This ratio represents the fraction of processed frames in an "
+            "interval where at least one face was detected. It does not "
+            "represent the percentage of students present."
+        )
+
+    if "rms_energy" in fused.columns:
+        st.subheader("Audio Signal Energy Over Time")
+
+        audio_chart = fused[
+            ["start_time_seconds", "rms_energy"]
+        ].dropna().set_index("start_time_seconds")
+
+        st.line_chart(audio_chart)
+
+        st.caption(
+            "RMS energy measures signal strength. It cannot, by itself, "
+            "distinguish speech from noise or silence."
+        )
+
+    if "audio_activity" in fused.columns:
+        st.subheader("Audio Activity Summary")
+
+        audio_counts = (
+            fused["audio_activity"]
+            .fillna("Unknown")
+            .value_counts()
+            .rename_axis("Activity")
+            .reset_index(name="Intervals")
+        )
+
+        st.bar_chart(audio_counts.set_index("Activity"))
+
+# Activity indicators
+st.header("3. Activity Indicator Analysis")
+
+if scores is None or scores.empty:
+    st.warning("Activity scores are unavailable.")
+else:
+    if "activity_category" in scores.columns:
+        category_counts = (
+            scores["activity_category"]
+            .fillna("Unknown")
+            .value_counts()
+            .rename_axis("Category")
+            .reset_index(name="Intervals")
+        )
+
+        st.subheader("Activity Category Distribution")
+        st.bar_chart(category_counts.set_index("Category"))
+
+    score_columns = [
+        column for column in [
+            "start_time_seconds",
+            "visual_score",
+            "audio_score",
+            "activity_indicator",
+            "activity_category"
+        ]
+        if column in scores.columns
+    ]
+
+    if score_columns:
+        st.subheader("Activity Score Records")
+        st.dataframe(
+            scores[score_columns],
+            use_container_width=True,
+            hide_index=True
+        )
+
+# Teaching suggestions
+st.header("4. Teaching Suggestions")
+
+if suggestions is None or suggestions.empty:
+    st.info("No teaching suggestions are available.")
+elif "teaching_suggestion" in suggestions.columns:
+    unique_suggestions = (
+        suggestions["teaching_suggestion"]
+        .dropna()
+        .astype(str)
+        .unique()
+    )
+
+    if len(unique_suggestions) == 0:
+        st.info("No suggestions were generated.")
+    else:
+        for number, suggestion in enumerate(unique_suggestions, start=1):
+            st.markdown(f"**{number}.** {suggestion}")
+
+    st.caption(
+        "Suggestions are generated by predefined rules. Review the lesson "
+        "context before acting on them."
+    )
+
+# Raw data tables
+st.header("5. Detailed Output Tables")
+
+table_options = {
+    "Attendance Records": attendance,
+    "Fused Signals": fused,
+    "Activity Scores": scores,
+    "Teaching Suggestions": suggestions
+}
+
+available_tables = {
+    name: dataframe
+    for name, dataframe in table_options.items()
+    if dataframe is not None
+}
+
+if available_tables:
+    selected_table = st.selectbox(
+        "Choose a dataset to inspect",
+        list(available_tables.keys())
+    )
+
+    st.dataframe(
+        available_tables[selected_table],
+        use_container_width=True,
+        hide_index=True
+    )
+else:
+    st.warning("No output tables are available yet.")
+
+# Footer
+st.divider()
+
+st.caption(
+    "Privacy note: This dashboard runs locally by default. Use only "
+    "recordings you are authorized to process. Avoid uploading identifiable "
+    "classroom videos or attendance records to public repositories."
+)

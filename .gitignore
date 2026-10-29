@@ -1,0 +1,29 @@
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Editor and operating system files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local recordings and generated attendance data
+data/videos/*
+data/attendance/*
+
+# Preserve empty data directories
+!data/videos/.gitkeep
+!data/attendance/.gitkeep
